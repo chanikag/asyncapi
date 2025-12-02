@@ -1,0 +1,37 @@
+name: Send Regression Alerts
+
+on:
+  issues:
+    types:
+      - labeled
+      - opened
+
+jobs:
+  alert-google-chat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if regression label is present
+        id: check
+        run: |
+          echo "has_regression=false" >> $GITHUB_OUTPUT
+          for label in $(echo '${{ toJson(github.event.issue.labels) }}' | jq -r '.[].name'); do
+            if [ "$label" = "regression" ]; then
+              echo "has_regression=true" >> $GITHUB_OUTPUT
+            fi
+          done
+      - name: Send notification to Google Chat
+        if: steps.check.outputs.has_regression == 'true'
+        env:
+          WEBHOOK_URL: ${{ secrets.REGRESSION_WEBHOOK_URL }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          MESSAGE="{
+            \"text\": \"⚠️ *Regression Issue Alert*\nIssue #${ISSUE_NUMBER}: *${ISSUE_TITLE}* has the *regression* label.\nAction by: ${ACTOR}\n${ISSUE_URL}\"
+          }"
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d "${MESSAGE}" \
+            "${WEBHOOK_URL}"
